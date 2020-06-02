@@ -285,7 +285,9 @@ public class Bootstrap {
 
         Bootstrap bootstrap = new Bootstrap();
 
+        // 解析类中所有带@Option、@Argument的方法，初始化CLI
         CLI cli = CLIConfigurator.define(Bootstrap.class);
+        // 解析用户输入的参数，初始化所有命令行参数
         CommandLine commandLine = cli.parse(Arrays.asList(args));
 
         try {
@@ -296,9 +298,12 @@ public class Bootstrap {
             System.exit(1);
         }
 
+        // 设置日志级别
         if (bootstrap.isVerbose()) {
             AnsiLog.level(Level.ALL);
         }
+
+        // 根据启动参数，判断是否是查看帮助（-h 或者 --help），如果是查看帮助，则打印usage
         if (bootstrap.isHelp()) {
             System.out.println(usage(cli));
             System.exit(0);
@@ -306,6 +311,7 @@ public class Bootstrap {
 
         if (bootstrap.getRepoMirror() == null || bootstrap.getRepoMirror().trim().isEmpty()) {
             bootstrap.setRepoMirror("center");
+            // 如果是在国内，则设置maven源为aliyun
             // if timezone is +0800, default repo mirror is aliyun
             if (TimeUnit.MILLISECONDS.toHours(TimeZone.getDefault().getOffset(System.currentTimeMillis())) == 8) {
                 bootstrap.setRepoMirror("aliyun");
@@ -313,6 +319,7 @@ public class Bootstrap {
         }
         AnsiLog.debug("Repo mirror:" + bootstrap.getRepoMirror());
 
+        // 如果启动参数为查看版本，则显示版本
         if (bootstrap.isVersions()) {
             if (mavenMetaData == null) {
                 mavenMetaData = DownloadUtils.readMavenMetaData(bootstrap.getRepoMirror(), bootstrap.isuseHttp());
@@ -321,12 +328,14 @@ public class Bootstrap {
             System.exit(0);
         }
 
+        // 判断当前环境是否JDK6或者JDK7，如果是，则只支持Http方式启动
         if (JavaVersionUtils.isJava6() || JavaVersionUtils.isJava7()) {
             bootstrap.setuseHttp(true);
             AnsiLog.debug("Java version is {}, only support http, set useHttp to true.",
                             JavaVersionUtils.javaVersionStr());
         }
 
+        // 检查http和telnet接口是否被占用
         // check telnet/http port
         long telnetPortPid = -1;
         long httpPortPid = -1;
@@ -343,6 +352,7 @@ public class Bootstrap {
             }
         }
 
+        // 获取用户指定的进程ID，如果没有指定，默认去telent端口占用的进程ID
         long pid = bootstrap.getPid();
         // select pid
         if (pid < 0) {
@@ -358,6 +368,7 @@ public class Bootstrap {
             }
         }
 
+        // 检查目标进程ID与Telnet或者http端口是否一致
         checkTelnetPortPid(bootstrap, telnetPortPid, pid);
 
         if (httpPortPid > 0 && pid != httpPortPid) {
@@ -372,9 +383,11 @@ public class Bootstrap {
         // find arthas home
         File arthasHomeDir = null;
         if (bootstrap.getArthasHome() != null) {
+            // 检查arthas目录下是否存在"arthas-core.jar", "arthas-agent.jar", "arthas-spy.jar"
             verifyArthasHome(bootstrap.getArthasHome());
             arthasHomeDir = new File(bootstrap.getArthasHome());
         }
+        // 指定版本的处理过程
         if (arthasHomeDir == null && bootstrap.getUseVersion() != null) {
             // try to find from ~/.arthas/lib
             File specialVersionDir = new File(System.getProperty("user.home"), ".arthas" + File.separator + "lib"
@@ -388,6 +401,7 @@ public class Bootstrap {
             arthasHomeDir = specialVersionDir;
         }
 
+        // 如果在上面都没有确认arthas home，则获取当前Jar包的父目录
         // Try set the directory where arthas-boot.jar is located to arhtas home
         if (arthasHomeDir == null) {
             CodeSource codeSource = Bootstrap.class.getProtectionDomain().getCodeSource();
@@ -404,6 +418,8 @@ public class Bootstrap {
             }
         }
 
+        // 如果仍然没有确认arthas home，则查看ARTHAS_LIB_DIR下是否存在本地版本，并获取远程最新的版本号，对比本地和远程
+        // 如果本地版本低于远程版本，则尝试去下载远程最新版本
         // try to download from remote server
         if (arthasHomeDir == null) {
             boolean checkFile =  ARTHAS_LIB_DIR.exists() || ARTHAS_LIB_DIR.mkdirs();
@@ -465,10 +481,11 @@ public class Bootstrap {
             arthasHomeDir = new File(ARTHAS_LIB_DIR, localLastestVersion + File.separator + "arthas");
         }
 
+        // 再次校验相关jar 是否存在
         verifyArthasHome(arthasHomeDir.getAbsolutePath());
 
         AnsiLog.info("arthas home: " + arthasHomeDir);
-
+        // 启动arthas-core.jar，并制定agent
         if (telnetPortPid > 0 && pid == telnetPortPid) {
             AnsiLog.info("The target process already listen port {}, skip attach.", bootstrap.getTelnetPort());
         } else {
@@ -517,10 +534,12 @@ public class Bootstrap {
             AnsiLog.info("Attach process {} success.", pid);
         }
 
+        // 判断是否只做attach操作，如果只做attach，则不链接
         if (bootstrap.isAttachOnly()) {
             System.exit(0);
         }
 
+        // 启动客户端
         // start java telnet client
         // find arthas-client.jar
         URLClassLoader classLoader = new URLClassLoader(

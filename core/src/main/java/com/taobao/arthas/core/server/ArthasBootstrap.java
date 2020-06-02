@@ -224,6 +224,7 @@ public class ArthasBootstrap {
 
         long start = System.currentTimeMillis();
 
+        // cas判断是否已经启动
         if (!isBindRef.compareAndSet(false, true)) {
             throw new IllegalStateException("already bind");
         }
@@ -252,6 +253,7 @@ public class ArthasBootstrap {
         }
 
         try {
+            // 初始化ShellServerOptions参数
             ShellServerOptions options = new ShellServerOptions()
                             .setInstrumentation(instrumentation)
                             .setPid(PidUtils.currentLongPid())
@@ -262,10 +264,13 @@ public class ArthasBootstrap {
                 welcomeInfos.put("id", agentId);
                 options.setWelcomeMessage(ArthasBanner.welcome(welcomeInfos));
             }
+            // 实例化一个 ShellServer
             shellServer = new ShellServerImpl(options, this);
+            // 初始化BuiltinCommandPack，在内部会把一些预值的命令打包进去
             BuiltinCommandPack builtinCommands = new BuiltinCommandPack();
             List<CommandResolver> resolvers = new ArrayList<CommandResolver>();
             resolvers.add(builtinCommands);
+            // 如果telnet端口大于0，则ShellServer注册TelnetTermServer
             // TODO: discover user provided command resolver
             if (configure.getTelnetPort() > 0) {
                 shellServer.registerTermServer(new HttpTelnetTermServer(configure.getIp(), configure.getTelnetPort(),
@@ -273,6 +278,8 @@ public class ArthasBootstrap {
             } else {
                 logger().info("telnet port is {}, skip bind telnet server.", configure.getTelnetPort());
             }
+
+            // 如果http端口大于0，则ShellServer注册HttpTermServer
             if (configure.getHttpPort() > 0) {
                 shellServer.registerTermServer(new HttpTermServer(configure.getIp(), configure.getHttpPort(),
                                 options.getConnectionTimeout()));
@@ -280,10 +287,12 @@ public class ArthasBootstrap {
                 logger().info("http port is {}, skip bind http server.", configure.getHttpPort());
             }
 
+            // ShellServer注册相关命令的解析器
             for (CommandResolver resolver : resolvers) {
                 shellServer.registerCommandResolver(resolver);
             }
 
+            // 启动监听
             shellServer.listen(new BindHandler(isBindRef));
 
             logger().info("as-server listening on network={};telnet={};http={};timeout={};", configure.getIp(),
